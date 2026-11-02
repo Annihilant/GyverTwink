@@ -1,4 +1,4 @@
-//GyverTwink_v1.2_edited.ino
+//GyverTwink_v1.2_Plus.ino
 /*
   Скетч к проекту "GyverTwink"
   - Страница проекта (схемы, описания): https://alexgyver.ru/gyvertwink/
