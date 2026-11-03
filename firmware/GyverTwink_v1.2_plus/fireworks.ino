@@ -88,7 +88,7 @@ void salute(byte thisEffect, byte scale, byte speed) {
     fwMinY = mny << 3; fwMaxY = mxy << 3;
     int32_t area = (int32_t)(mxx - mnx + 1) * (int32_t)(mxy - mny + 1);
     int spacing = (int)sqrt((float)area / cfg.ledAm) + 1;
-    band8 = constrain(spacing * 6, 12, 48);   // полная толщина кольца ~1,5 шага между диодами
+    band8 = constrain(spacing * 3, 8, 24);    // тонкое кольцо ~0,75 шага — меньше осыпается  //(spacing * 6, 12, 48);   // полная толщина кольца ~1,5 шага между диодами
     buildGrid();
     spawnC = 60;
   }
@@ -168,25 +168,26 @@ void salute(byte thisEffect, byte scale, byte speed) {
           FwP p;
           p.x = (int16_t)xy[j][0] << 3;             // падает ровно со своего места
           p.y = (int16_t)xy[j][1] << 3;
-          p.vx = random(-2, 3);                     // лёгкий дрейф в стороны
-          p.vy = 0;
-          p.life = random(20, 55);                  // 0,6–1,65 с падения
+          int32_t kick = random(4, 10);                              // радиальный пинок: залп распускается кнаружи
+          p.vx = (int16_t)(dx * kick / f.rMax8) + random(-1, 2);
+          p.vy = (int16_t)(dy * kick / f.rMax8);                     // верхняя часть уходит вверх — потом заберёт гравитация
+          p.life = random(20, 55);                        // 0,6–1,65 с падения
           if (n < FW_SPARKS) f.s[n] = p;
-          else f.s[random(FW_SPARKS)] = p;          // больше заданного — случайный отбор
+          else f.s[random(FW_SPARKS)] = p;                // больше заданного — случайный отбор
           n++;
         }
         f.n = (n > FW_SPARKS) ? FW_SPARKS : n;
       }
     }
-    else if (f.phase == 4) {          // осыпание: искры падают медленно, искрятся, угасают
+    else if (f.phase == 4) {                        // осыпание: искры падают медленно, искрятся, угасают
           bool alive = false;
           for (byte i = 0; i < f.n; i++) {
             if (!f.s[i].life) continue;
             alive = true;
             if (f.s[i].life > 1) f.s[i].life -= 1;  // угасание
             else f.s[i].life = 0;
-            f.s[i].vx = (f.s[i].vx * 8) / 16;       // дрейф затухает
-            f.s[i].vy = min(f.s[i].vy + 1, 5);      // разгон вниз
+            f.s[i].vx = (f.s[i].vx * 12) / 16;      // дрейф тянется дольше — красивее пинок.   Было "8) / 16;"
+            f.s[i].vy = min(f.s[i].vy + 1, 2);      // разгон вниз "1, 2", "1, 5" быстрее
         f.s[i].x += f.s[i].vx;
         f.s[i].y += f.s[i].vy;
         if (!f.s[i].life) continue;
@@ -196,10 +197,17 @@ void salute(byte thisEffect, byte scale, byte speed) {
         }
         int bestI = nearestLed(f.s[i].x, f.s[i].y);
         if (bestI < 0) continue;
-        uint8_t br = f.s[i].life;
-        if (random8() < 60) br = qadd8(br, 120);   // искрим в падении
-        else if (random8() < 40) br = br >> 1;
-        leds[bestI] += ColorFromPalette(paletteArr[pal], f.col + random8(24) - 12, br, LINEARBLEND);
+        uint8_t br = (uint16_t)f.s[i].life * 255 / 55;   // полная яркость при рождении
+        // базовая искра — цвета салюта с лёгким дрожанием оттенка
+        CRGB c = ColorFromPalette(paletteArr[pal], f.col + random8(24) - 12, br, LINEARBLEND);
+        if (random8() < 60) {                      // короткая белая вспышка поверх цвета
+          byte fb = random8(90, 160);
+          c.r = qadd8(c.r, fb);
+          c.g = qadd8(c.g, fb);
+          c.b = qadd8(c.b, fb);
+        }
+        else if (random8() < 40) c.nscale8(128);   // лёгкое подрагивание яркости
+        leds[bestI] += c;
       }
       if (!alive) f.phase = 255;
     }
@@ -217,8 +225,10 @@ void salute(byte thisEffect, byte scale, byte speed) {
       int32_t d2 = (int32_t)dx * dx + (int32_t)dy * dy;
       if (d2 > 65535) continue;
       int16_t d = (int16_t)sqrt16((uint16_t)d2);
-      if (abs(d - f.r8) <= band8) {
-        leds[j] += ColorFromPalette(paletteArr[pal], f.col, 255, LINEARBLEND);
+      int16_t e = abs(d - f.r8);
+      if (e <= band8) {
+        int32_t q = (int32_t)e * e * 255 / ((int32_t)band8 * band8);   // квадратичный спад к краям
+        leds[j] += ColorFromPalette(paletteArr[pal], f.col, 255 - q, LINEARBLEND);
       }
     }
   }
